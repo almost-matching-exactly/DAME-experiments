@@ -1,4 +1,4 @@
-Eimport numpy as np
+import numpy as np
 import pandas as pd
 import pickle
 import time
@@ -38,11 +38,6 @@ def match_mp(df, covs, covs_max_list,
     '''
 
     # truncate the matrix with the covariates columns
-    covs_new = []
-    for i in covs:
-        covs_new.append(i)
-    covs = covs_new
-    
     arr_slice_wo_t = df[covs].values # the covariates values as a matrix
     
     # truncate the matrix with the covariate and treatment indicator columns
@@ -62,17 +57,16 @@ def match_mp(df, covs, covs_max_list,
     
     # count how many times each number appears
     _, unqtags_wo_t, counts_wo_t = np.unique(lidx_wo_t, return_inverse=True,
-                                                        return_counts=True)
-                                                        
+                                                        return_counts=True) 
+    
     # count how many times each number appears (with treatment indicator)
     _, unqtags_w_t, counts_w_t = np.unique(lidx_w_t, return_inverse=True, 
                                                      return_counts=True) 
     
     # a unit is matched if and only if the counts don't agree
     match_indicator = ~(counts_w_t[unqtags_w_t] == counts_wo_t[unqtags_wo_t]) 
-        
+    #print(match_indicator)
     return match_indicator, lidx_wo_t[match_indicator]
-
 
 
 # In[5]:
@@ -91,71 +85,39 @@ def prediction_error_mp(holdout, covs_subset, ridge_reg = 0.1):
    
     # below is the regression part for PE
     s = time.time()
-    
+
     # Ridge : solves a regression model where the loss function is 
     #         the linear least squares function and 
     #         regularization is given by the l2-norm
-    ridge_c = Ridge(alpha=ridge_reg) 
-    ridge_t = Ridge(alpha=ridge_reg) 
-    
-    mse_t = np.mean(cross_val_score(ridge_t,
+    """
+    ridge_c = Ridge(alpha=0.1) 
+    ridge_t = Ridge(alpha=0.1) 
+    """
+    ridge_c = Ridge(alpha=0.1) 
+    ridge_t = Ridge(alpha=0.1) 
+       
+    n_mse_t = np.mean(cross_val_score(ridge_t,
                                 holdout[holdout['treated']==1][covs_subset], 
                                 holdout[holdout['treated']==1]['outcome'], 
                                 scoring = 'neg_mean_squared_error' ) )
         
-    mse_c = np.mean(cross_val_score(ridge_c, 
+    n_mse_c = np.mean(cross_val_score(ridge_c, 
                                 holdout[holdout['treated']==0][covs_subset], 
                                 holdout[holdout['treated']==0]['outcome'],
                                 scoring = 'neg_mean_squared_error' ) )
     
-    num_t = holdout[holdout['treated'] == 1]['outcome'].shape[0]
-    num_c = holdout[holdout['treated'] == 0]['outcome'].shape[0]
-    PE = mse_t + mse_c
+
+    PE = n_mse_t + n_mse_c
     
     time_PE = time.time() - s
     # -- above is the regression part for PE
     
     # -- below is the level-wise MQ
-    return  (PE, time_PE,  mse_t, mse_c) 
+    #print(str(covs_subset), str(PE))
+    return  (PE, time_PE,  n_mse_t, n_mse_c) 
 
-# function to compute the balancing factor
-def balancing_factor_mp(df, match_indicator, tradeoff = 1):
-    ''' Input : 
-            df : the data matrix
-            match_indicator : the matched indicator column 
-        
-        Output : 
-            balancing_factor : the balancing factor
-            time_BF : time to compute the balancing factor
-    '''    
-    
-    s = time.time()
-    
-    # how many control units are unmatched 
-    # recall matched units are removed from the data frame
-    num_control = len(df[df['treated']==0]) 
-    
-    # how many treated units that are unmatched
-    # recall matched units are removed from the data frame
-    num_treated = len(df[df['treated']==1]) 
-    
-    # how many control units are matched at this level
-    num_control_matched = np.sum((match_indicator) & (df['treated']==0))
-    
-    # how many treated units are matched at this level
-    num_treated_matched = np.sum((match_indicator) & (df['treated']==1)) 
-    
-    BF = tradeoff * ( float(num_control_matched)/num_control + 
-                      float(num_treated_matched)/num_treated ) 
-    
-    time_BF = time.time() - s
-    
-    # -- below is the level-wise MQ
-    return  (BF , time_BF ) 
-    
 
-# match_quality, the larger the better
-def match_quality_mp(BF, PE):
+def match_quality_mp(PE):
     ''' Input : 
             df : the data matrix
             holdout : the training data matrix
@@ -168,58 +130,54 @@ def match_quality_mp(BF, PE):
             time_BF : time to compute the balancing factor
     '''    
     
-    return  (BF + PE) 
     
+    return  (PE) 
 
-def get_CATE_bit_mp(df, match_indicator, index):
-    d = df[ match_indicator ]
-    print(d.shape[0])
+# ------------ Get CATE for each matched group ------------ #
+# df : whole dataset
+# group_idx_list: index of matched units in a group
+def get_cate_for_matched_group(df, group_idx_list):
+    if len(group_idx_list) == 0:
+        return None
+    df = df[df['index'].isin(group_idx_list)]
+    return df[df['treated'] == 1]['outcome'].mean() - df[df['treated'] == 0]['outcome'].mean()
+
+
+
+# -------------Find index of all first-time matched units in the matched group ------------- #
+# df: whole dataset
+# match_indicator: match indicators for all first-time matched units in current iteration
+# group_idx_list: list of index for all matched units in the matched group
+def find_matched_units_in_group(df, match_indicator, group_idx_list):
+    return list(set(group_idx_list) & set(df[match_indicator]['index'].tolist()))
+
+# -------------Get CATE for each matched unit for current iteration ------------------ #
+# df: whole dataset
+# match_indicator_for_all: match_indicator which contains all matched units at current iteration, 
+#                          including matched units which has already been matched in previous round.
+# match_indicator: match units which are matched for the first time at current iteration
+# index: index for all matched units at current iteration
+def get_CATE_bit_mp(df, match_indicator_for_all, match_indicator, index):
     # when index == None, nothing is matched
     if index is None: 
         return None
     
-    # we do a groupby to get the statistics
-    d.loc[:,'grp_id'] = index
-
-    res = d.groupby(['grp_id'])
-    res_list = []
-    for key, item in res:
-        df = res.get_group(key)
-        index_list = df['index0'].tolist()
-        df_t = df[df['treated']==1]
-        df_c = df[df['treated']==0]
-        mean_c = df_c['outcome'].mean()
-        mean_t = df_t['outcome'].mean()
-        mean = mean_t - mean_c
-        res_list.append([Decimal(mean),index_list])
-    return res_list
-
-def recover_covs_mp(d, covs, covs_max_list, binary = True):       
-    ind = d.index.get_level_values(0)
-    ind = [ num2vec_mp(ind[i], covs_max_list) 
-           for i in range(len(ind)) if i%2==0]
-
-    df = pd.DataFrame(ind, columns=covs ).astype(int)
-
-    mean_list = list(d['mean'])
-    size_list = list(d['size'])
-        
-    effect_list = [mean_list[2*i+1] - mean_list[2*i] 
-                   for i in range(len(mean_list)//2) ]
-    df.loc[:,'effect'] = effect_list
-    df.loc[:,'size'] = [size_list[2*i+1] + size_list[2*i] 
-                        for i in range(len(size_list)//2) ]
+    #get all matched units
+    df_all = df[ match_indicator_for_all ]
     
+    # get all matched groups
+    df_all.loc[:,'grp_id'] = index
+    res = df_all.groupby('grp_id')['index'].apply(list)
 
-    return df
+    #get CATE for each group and each unit
+    matched_res = []
+    for group_idx, group_idx_list in res.iteritems():
+        cate = get_cate_for_matched_group(df,group_idx_list)
+        if cate != None:
+            matched_index = find_matched_units_in_group(df,match_indicator,group_idx_list)
+            matched_res.append((cate,len(group_idx_list), matched_index))
 
-def cleanup_result_mp(res_all):
-    res = []
-    for i in range(len(res_all)):
-        r = res_all[i]
-        if not r[1] is None:
-            res.append(recover_covs_mp( r[1], r[0][0], r[0][1] ) )
-    return res
+    return matched_res
 
 def num2vec_mp(num, covs_max_list):
     res = []
@@ -233,6 +191,9 @@ def num2vec_mp(num, covs_max_list):
         num = num - num_i* covs_max_list[i]**(len(covs_max_list)-1-i)
     return res
 
+from itertools import combinations
+import re
+
 class PredictionE_mp: 
 
     """Class to define the set of Prediction Error for sets of size k : 
@@ -244,12 +205,16 @@ class PredictionE_mp:
     def __init__(self, size, sets, cur_set, pred_e):
         self.size = size
         self.sets = {cur_set : pred_e}
-    
+            
     def add(self, new_set, new_pred_error):
         """ this method adds the new set to the sets and 
             the corresponding prediction error"""
         
         self.sets[new_set] = new_pred_error
+
+
+from itertools import combinations
+import re
 
 class DroppedSets_mp: 
 
@@ -299,22 +264,22 @@ class DroppedSets_mp:
         new_active_sets = []
         new_candidate = []
         rem = []
-        
+
         # start by verifying if all the items in new_set have min support : 
         #     if no, there is no new active set to generate
         #     if yes, create a new active set by joining the set 
         #     with the items of min support
-        
+
         if set(new_set).issubset(set(self.min_support_item)) :
             aux = sorted(set(self.min_support_item) - set(new_set))
-            
             for element in aux:
                 new_candidate = sorted(set(new_set).union(set([element])))
                 new_active_sets.append(new_candidate)
-            
+       
+        remove_candidates = []
+       
         # now we can test if each candidate can be dropped
         for c in new_active_sets:
-            
             # generates the subsets needed to have already been dropped
             prefix = combinations(c,self.min_support) 
         
@@ -322,19 +287,246 @@ class DroppedSets_mp:
                 if sorted(c_p) not in self.dropped : 
                     # if a prefix of 'c' has not been dropped yet,
                     # remove 'c' from candidates
-                    rem.append(c)
+                    #rem.append(c)
+                    remove_candidates.append(c)
                     break # no need to check if the others 
                           # prefixes have been dropped
+        
+        
+        for remove in remove_candidates:
+            new_active_sets.remove(remove)
+        
+        """                
         for r in rem:
+            print("new active sets try to remove: ", r)
             new_active_sets.remove(r)
             # new_active_sets contains the sets to add to possible_drops
-        
+        '''
+        """
+
+        #print("new active sets: ", new_active_sets)
         return new_active_sets
+
+
+def get_actual_match_indicator(df,match_indicator_for_all):
+    unmatched_indicator = df['matched'] == 0
+    return unmatched_indicator & match_indicator_for_all
+
+# In[14]:
+
+def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1):
+    dropped = set()
+    unit_num_vs_cov_num = {}
+
+    covs = list(covs)
+    covs_max_list = list(covs_max_list)
+    
+    #----------- INITIALIZE THE DIFFERENT PARAMETERS ---------------#
+    
+    constant_list = ['outcome', 'treated','matched', 'index']
+    
+    covs_dropped = [] # set of sets of covariates dropped
+    all_covs = covs[:] # set of all covariates
+    
+    cur_covs_max_list = covs_max_list[:]
+    pos_drops = [[covs[i]] for i in range(len(covs))]
+
+    drops = [[]] # to keep track of the sets dropped
+    
+    # initialize the sets of dropped sets of size k, k=1..num_covs
+    # D^k = {s | s has been dropped and len(s) = k }
+    # we use the DroppedSets class
+    num_covs = len(covs)
+    D = []
+    for k in range(1,num_covs+1): 
+        D.append(DroppedSets_mp(k, [], [0]*num_covs, [])) 
+        # D[k] is for the dropped sets of size k+1
+    
+    # initialize the PE for sets of size k, k=1..num_covs
+    # PE^k
+    # we use the PredictionE class
+    
+    PE = []  #PE[k] contains the PE for dropped sets of size k
+    
+    
+    for k in range(1, num_covs+1): 
+        PE.append(PredictionE_mp(k, {}, (), 0)) 
+    
+    #--------- MATCH WITHOUT DROPPING ANYTHING AND GET CATE ----------#
+
+    nb_steps = 1
+    #print("level ", str(nb_steps))
+
+    # match without dropping anything and marked matched units as "matched"
+    match_indicator_for_all, index = match_mp(df, all_covs, covs_max_list) 
+    match_indicator = get_actual_match_indicator(df,match_indicator_for_all)
+    new_df = df[match_indicator]
+    new_df["matched"] = nb_steps
+    df.update(new_df)
+  
+    nb_match_units = [len(df[match_indicator])]
+    unit_num_vs_cov_num[len(covs)] = nb_match_units[-1]
+
+    PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, covs)
+    prediction = [PEs]
+    level_scores = [PEs]
+    init_score = PEs
+    #print("Score: ", str(init_score))
+
+    prediction_pos = [0]
+    n_mse_treatment = [n_mse_T]
+    n_mse_control = [n_mse_C]
+    
+    # get the CATEs without dropping anything
+    res = get_CATE_bit_mp(df, match_indicator_for_all,match_indicator, index) 
+
+    #print(res)
+    # result on first level, None means nothing is dropped
+    matching_res = [res] 
+    
+  
+    #-------------------- RUN COLLAPSING FLAME  ----------------------#
+
+    
+    while len(pos_drops)>0: # we still have sets to drop
+        
+        nb_steps = nb_steps + 1
+        #print("level ", str(nb_steps))
+        
+        # new stoping criteria
+        if pos_drops == [all_covs]: 
+            print('all possibles sets dropped')  
+            break
+        
+        # early stopping condition
+        
+        if (df[(df['treated'] == 0) & (df['matched'] == 0)]).empty  | (df[(df['treated'] == 1) & (df['matched'] == 0)]).empty: 
+            print('no more matches')
+            break
+            
+       
+        if df[(df['treated'] == 0) & (df['matched'] == 0)].shape[0]==0 or df[(df['treated'] == 0) & (df['matched'] == 0)].shape[0]==0: 
+            print('no more matches')
+            break
+        
+        
+        best_score = np.inf
+        matching_result_tmp = []
+        #------------------ FIND THE SET TO DROP ----------------------#
+        for s in pos_drops:
+            
+            cur_covs_no_s = sorted(set(all_covs) - set(s))
+            cur_covs_max_list_no_s = [2]*(len(all_covs) - len(s))
+
+
+            match_indicator_for_all, index = match_mp(df, cur_covs_no_s,
+                                           cur_covs_max_list_no_s) 
+            match_indicator = get_actual_match_indicator(df,match_indicator_for_all)
+            
+            #BF, time_BF = balancing_factor_mp(df, match_indicator,
+                                           #tradeoff=tradeoff_param)
+
+            if tuple(s) not in PE[len(s)].sets.keys():
+                tmp_pe, time_PE, n_mse_t, n_mse_c = prediction_error_mp(holdout,
+                                                                     cur_covs_no_s)
+                PE[len(s)].sets[tuple(s)] = tmp_pe
+            
+            pe_s = PE[len(s)].sets[tuple(s)] 
+            prediction_pos.append(pe_s)
+
+            #score = match_quality_mp(BF, pe_s)
+            score = match_quality_mp(pe_s)
+
+            matching_result_tmp.append((cur_covs_no_s, cur_covs_max_list_no_s,
+                                         score, match_indicator_for_all, match_indicator, index) )
+            
+        #-------------------- SET TO DROP FOUND ------------------------#
+
+
+        #------- DROP THE SET AND UPDATE MATCHING QUALITY AND CATE  ---#
+        
+        # choose the set with largest MQ as the set to drop
+        best_res = max(matching_result_tmp, key=itemgetter(2)) 
+        cur_score = best_res[2]
+        #print("Score: ", str(init_score))
+        if (init_score < 0 and cur_score <= init_score * 1.05) or (init_score >= 0 and cur_score <= init_score * 0.95):
+            print("early stop")
+            break
+        level_scores.append(max( [t[2] for t in matching_result_tmp] )) # just take best_res[2]
+
+        new_df = df[best_res[-2]]
+        new_df["matched"] = nb_steps
+        df.update(new_df)
+            
+        nb_match_units.append(len(df[best_res[-2]]))
+        nb_match_cov = len(best_res[0])
+        unit_num_vs_cov_num[nb_match_cov] = unit_num_vs_cov_num[nb_match_cov] + nb_match_units[-1] if nb_match_cov in unit_num_vs_cov_num else nb_match_units[-1]
+
+        del(matching_result_tmp)
+        
+        new_matching_res = get_CATE_bit_mp(df, best_res[-3], best_res[-2], best_res[-1])
+        matching_res.append(new_matching_res)
+        
+        covs_used = best_res[0]
+        cur_covs_max_list = best_res[1]
+        set_dropped = sorted(set(all_covs) - set(covs_used))
+        print("cov: ", str(set_dropped))
+        for i in set_dropped:
+        	if i not in dropped:
+        		dropped.add(i)
+        #print("matched: ", str(nb_match_units))
+        #to have the PE and BF and each level
+        cur_covs_no_s = sorted(set(covs_used))
+        cur_covs_max_list_no_s = [2]*(len(covs_used))
+        print(len(df[best_res[-2]]))
+        
+        PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, 
+                                                          cur_covs_no_s)
+  
+        prediction.append(PEs)
+        
+        n_mse_treatment.append(n_mse_T)
+        n_mse_control.append(n_mse_C)
+        
+        #---- SET DROPPED AND MATCHING QUALITY AND CATE UPDATED ------#
+
+
+        #------- GENERATE NEW ACTIVE SETS AND UPDATE THE QUEUE -------#
+
+
+        #new steps to find the new set of possible drops
+        
+        drops.append(set_dropped) # to keep track of the dropped sets
+        pos_drops = sorted(pos_drops)
+        
+        # remove the dropped set from the set of possible drops
+        
+        pos_drops.remove(set_dropped)
+
+        # add the dropped set to the set of dropped covariates
+        covs_dropped.append(set_dropped) 
+        
+        # add set_dropped to the correct D^k
+        k = len(set_dropped)
+        D[k-1].add(set_dropped)
+       
+        # now generate the new active sets from set_dropped
+        new_active_drops = D[k-1].generate_active_sets(set_dropped)
+        
+        # add new_active_drops to possible drops
+        added_pos_drops = []
+        for x in new_active_drops: 
+            if x not in pos_drops and x not in drops:
+                pos_drops.append(x) 
+    
+        #------------------- QUEUE UPDATED -----------------------------#
+    
+    return matching_res, unit_num_vs_cov_num
 
     
 def process_data():
     #parse data
-    df = pd.read_csv('MyBTCData_R2.csv', index_col=0, parse_dates=True)
+    df = pd.read_csv('data/MyBTCData_R2.csv', index_col=0, parse_dates=True)
     df = df.rename(columns={'BTC': 'treated', 'outcome_matrix$ANY_NDRU': 'outcome'})
     df_treated = df.loc[:,'treated']
     df = df.drop('treated',1)
@@ -355,270 +547,41 @@ def process_data():
     df['matched'] = 0
     
     df = df.reset_index()
-    df['index0'] = df.index
-    df = df.drop('index',1)
-    df.to_csv("data.csv")
+    df['index'] = df.index
+    #df = df.drop('index',1)
+    df.to_csv("data/data.csv")
     
     return df,df
 
-def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 1):
-    
-    
-    #----------- INITIALIZE THE DIFFERENT PARAMETERS ---------------#
-    
-    constant_list = ['outcome', 'treated','index0']
-    
-    covs_dropped = [] # set of sets of covariates dropped
-    all_covs = covs[:] # set of all covariates
-    
-    cur_covs_max_list = covs_max_list[:]
-    pos_drops = [[covs[i]] for i in range(len(covs))]
-    
-    drops = [[]] # to keep track of the sets dropped
-    len_queue = [len(pos_drops)]
-    
-    # initialize the sets of dropped sets of size k, k=1..num_covs
-    # D^k = {s | s has been dropped and len(s) = k }
-    # we use the DroppedSets class
-    num_covs = len(covs)
-    D = []
-    for k in range(1,num_covs+1): 
-        D.append(DroppedSets_mp(k, [], [0]*num_covs, [])) 
-        # D[k] is for the dropped sets of size k+1
-    
 
-    # initialize the PE for sets of size k, k=1..num_covs
-    # PE^k
-    # we use the PredictionE class
-    
-    PE = []  #PE[k] contains the PE for dropped sets of size k
-    
-    
-    for k in range(1, num_covs+1): 
-        PE.append(PredictionE_mp(k, {}, (), 0)) 
-    
-    # initialize the timing table
-    t_match, t_pe, t_bf, t_cate, t_rm, = ([],[0],[0],[], []) 
-    
-    #--------- MATCH WITHOUT DROPPING ANYTHING AND GET CATE ----------#
+def get_ATE(matching_res):
+    unzip_matching_idx = [len(matching_res_grp[2]) for matching_res_level in matching_res if matching_res_level != None for matching_res_grp in matching_res_level]
+    print("total matched: " + str(sum(unzip_matching_idx)))
 
-    nb_steps = 0
-    print("level: ", nb_steps)
-    
-    # match without dropping anything
-    t = time.time()
-    match_indicator, index = match_mp(df, all_covs, covs_max_list) 
-    t_match.append(time.time() - t)
-    
-    nb_match_units = [len(df[match_indicator])]
-    BFs, time_BFs = balancing_factor_mp(df, match_indicator,
-                                     tradeoff=tradeoff_param)
-    balance = [BFs]
-    PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, covs)
-    prediction = [PEs]
-    prediction_pos = [0]
-    n_mse_treatment = [n_mse_T]
-    n_mse_control = [n_mse_C]
-    level_scores = [PEs + BFs]
-
-    nb_units_t = [len(df[df['treated'] == 1])]
-    nb_units_c = [len(df[df['treated'] == 0])]
-    # get the CATEs without dropping anything
-    t = time.time()
-    res = get_CATE_bit_mp(df, match_indicator, index) 
-    t_cate.append(time.time() - t)
-
-    
-    # result on first level, None means nothing is dropped
-    matching_res = [res] 
-    
-    # remove matched units
-    t = time.time()
-    df = df[~match_indicator][ all_covs + constant_list ] 
-    t_rm.append(time.time() - t)
-
-
-
-
-    #-------------------- RUN COLLAPSING FLAME  ----------------------#
-
-
-    while len(pos_drops)>0: # we still have sets to drop
-        
-        nb_steps = nb_steps + 1
-        print("level: ", nb_steps)
-        # new stoping criteria
-        if pos_drops == [all_covs]: 
-            print('all possibles sets dropped')  
-            break
-        
-        best_score = np.inf
-        matching_result_tmp = []
-
-        # early stopping condition
-        if (df['treated'] == 0).empty  | (df['treated'] == 1).empty: 
-            print('no more matches')
-            break
-            
-        if (np.sum(df['treated'] == 0)==0) | (np.sum(df['treated'] == 1)==0) : 
-            print('no more matches')
-            break
-        
-        # added to put theshold on number of units matched
-        units_left = len(df)
-        if units_left <= threshold: 
-            print('reached threshold')  
-            break
-        
-        t_match_tmp = 0
-        t_pe_tmp = 0
-        t_bf_tmp = 0
-        
-         
-        #------------------ FIND THE SET TO DROP ----------------------#
-        for s in pos_drops:
-            cur_covs_no_s = sorted(set(all_covs) - set(s))
-            cur_covs_max_list_no_s = [2]*(len(all_covs) - len(s))
-
-            t = time.time()
-            match_indicator, index = match_mp(df, cur_covs_no_s,
-                                           cur_covs_max_list_no_s) 
-            t_match_tmp = t_match_tmp + time.time() - t 
-
-            BF, time_BF = balancing_factor_mp(df, match_indicator,
-                                           tradeoff=tradeoff_param)
-            t_bf_tmp = t_bf_tmp + time_BF
-
-
-            if tuple(s) not in PE[len(s)].sets.keys():
-                tmp_pe, time_PE, n_mse_t, n_mse_c = prediction_error_mp(holdout,
-                                                                     cur_covs_no_s)
-                PE[len(s)].sets[tuple(s)] = tmp_pe
-            
-            pe_s = PE[len(s)].sets[tuple(s)] 
-            prediction_pos.append(pe_s)
-            t_pe_tmp = t_pe_tmp + time_PE 
-
-
-            score = match_quality_mp(BF, pe_s)
-
-
-                         
-            matching_result_tmp.append((cur_covs_no_s, cur_covs_max_list_no_s,
-                                         score, match_indicator, index) )
-            
-        #-------------------- SET TO DROP FOUND ------------------------#
-
-
-        #------------------- UPDATE THE TIMING TABLE -------------------#
-
-
-        t_match.append(t_match_tmp)
-        t_pe.append(t_pe_tmp)
-        t_bf.append(t_bf_tmp)
-        del(t_match_tmp)
-        del(t_pe_tmp)
-        del(t_bf_tmp)
-        
-        #------------------- TIMING TABLE UPDATED ---------------------#
-
-
-        #------- DROP THE SET AND UPDATE MATCHING QUALITY AND CATE  ---#
-        
-        # choose the set with largest MQ as the set to drop
-        best_res = max(matching_result_tmp, key=itemgetter(2)) 
-
-            
-        level_scores.append(max( [t[2] for t in matching_result_tmp] )) # just take best_res[2]
-        nb_match_units.append(len(df[best_res[-2]]))
-         
-        del(matching_result_tmp)
-        
-        t = time.time()
-        new_matching_res = get_CATE_bit_mp(df, best_res[-2], best_res[-1])
-        t_cate.append(time.time() - t)
-
-        
-        covs_used = best_res[0]
-        cur_covs_max_list = best_res[1]
-        matching_res.append(new_matching_res)
-        
-        set_dropped = sorted(set(all_covs) - set(covs_used))
-        
-        #to have the PE and BF and each level
-        cur_covs_no_s = sorted(set(covs_used))
-        cur_covs_max_list_no_s = [2]*(len(covs_used))
-            
-        BFs, time_BFs = balancing_factor_mp(df, best_res[3], 
-                                         tradeoff=tradeoff_param)
-        balance.append(BFs)
-        
-        PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, 
-                                                          cur_covs_no_s)
-        prediction.append(PEs)
-        
-        n_mse_treatment.append(n_mse_T)
-        n_mse_control.append(n_mse_C)
-        
-        #---- SET DROPPED AND MATCHING QUALITY AND CATE UPDATED ------#
-
-
-        #------- GENERATE NEW ACTIVE SETS AND UPDATE THE QUEUE -------#
-
-
-        #new steps to find the new set of possible drops
-        drops.append(set_dropped) # to keep track of the dropped sets
-        pos_drops = sorted(pos_drops)
-        
-        # remove the dropped set from the set of possible drops
-        pos_drops.remove(set_dropped)
-        
-        # add the dropped set to the set of dropped covariates
-        covs_dropped.append(set_dropped) 
-        
-        # add set_dropped to the correct D^k
-        k = len(set_dropped)
-        D[k-1].add(set_dropped)
-        
-       
-        # now generate the new active sets from set_dropped
-        new_active_drops = D[k-1].generate_active_sets(set_dropped)
-        
-        # add new_active_drops to possible drops
-        for x in new_active_drops: 
-            if x not in pos_drops:
-                pos_drops.append(x) 
-        
-        len_queue.append(len(pos_drops))
-        
-        
-        t = time.time()
-        df = df[~ best_res[-2] ]
-
-        t_rm.append(time.time() - t)
-        nb_units_t.append(len(df[df['treated'] == 1]))
-        nb_units_c.append(len(df[df['treated'] == 0]))        
-        #------------------- QUEUE UPDATED -----------------------------#
-        
-        
-
-    #---------- END COLLAPSING FLAME : RETURN RESULTS ------------------#
-
-    
-    timings = (t_match, t_pe, t_bf, t_cate, t_rm)
-    return (timings, matching_res,
-            level_scores,nb_match_units, drops)
+    weighted_sum = 0
+    total_weight = 0
+    unzip_matching_res = [matching_res_grp[:2] for matching_res_level in matching_res if matching_res_level != None for matching_res_grp in matching_res_level]
+    for cate, weight in unzip_matching_res:
+        weighted_sum += cate * weight
+        total_weight += weight
+    ATE = weighted_sum * 1.0 / total_weight
+    print("ATE: " + str(ATE))
 
 if __name__ == '__main__':
+    random.seed(100)
     train,test = process_data()
+
     index_list = ['0','1','2','3','4','5','6','7','8','9']
     for index in index_list:
         train.rename(columns={index:int(index)},inplace=True)
         test.rename(columns={index:int(index)},inplace=True)
 
-    covs = [0,1,2,3,4,5,6,7,8,9]
-    res_col = run_mpbit(train, test,covs, [2]*10, threshold = 0, tradeoff_param = 1) 
-    pickle.dump(res_col, open('FLAME-col-result', 'wb'))
-    
+    covs = list(range(10))
+    res_col, unit_num_vs_cov_num = run_mpbit(train, test,covs, [2]*10, threshold = 0, tradeoff_param = 1) 
+
+    print(unit_num_vs_cov_num)
+    get_ATE(res_col)
+    pickle.dump(res_col, open('res/FLAME-col-result', 'wb'))
+     
 
 

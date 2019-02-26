@@ -32,7 +32,7 @@ import random
 # as input; and outputs the matching quality
 def score_tentative_drop_c(cov_l, c, db_name, holdout_df, thres = 0, tradeoff = 0.1):
     covs_to_match_on = set(cov_l) - {c} # the covariates to match on
-    
+
     # the flowing query fetches the matched results (the variates, the outcome, the treatment indicator)
     s = time.time()
     cur.execute('''with temp AS
@@ -75,8 +75,8 @@ def score_tentative_drop_c(cov_l, c, db_name, holdout_df, thres = 0, tradeoff = 
     s = time.time() # the time for fetching data into memory is not counted if use this
     
     # below is the regression part for PE
-    ridge_c = Ridge(alpha=10)
-    ridge_t = Ridge(alpha=10)
+    ridge_c = Ridge(alpha=0.1) 
+    ridge_t = Ridge(alpha=0.1)  
     
     holdout = holdout_df.copy()
     holdout = holdout[ ["{}".format(c) for c in covs_to_match_on] + ['treated', 'outcome']]
@@ -98,12 +98,13 @@ def score_tentative_drop_c(cov_l, c, db_name, holdout_df, thres = 0, tradeoff = 
         return (PE, PE,0, 0,time_match, time_PE, time_BF)
     else:
         BF = float(len(res[res[:,-2]==0]))/num_control[0][0] + float(len(res[res[:,-2]==1]))/num_treated[0][0]
-        MQ = tradeoff * BF + PE
+        MQ = PE
+        print(str(covs_to_match_on), str(MQ))
         num_matched = len(res[res[:,-2]==0]) + len(res[res[:,-2]==1])
         return ( MQ,
                  PE,
                  BF,
-                 num_matched,
+                 float(len(res[res[:,-2]==0])) + float(len(res[res[:,-2]==1])),
                 time_match, time_PE, time_BF)
     
 def update_matched(covs_matched_on, db_name, level):
@@ -132,7 +133,7 @@ def update_matched(covs_matched_on, db_name, level):
     return
 
 def get_CATE_db(cov_l, db_name, level):
-    cur.execute(''' select {0}, array_agg(index0),avg(outcome * 1.0), count(*)
+    cur.execute(''' select {0}, array_agg(index),avg(outcome * 1.0), count(*)
                     from {1}
                     where matched = {2} and treated = 0
                     group by {0}
@@ -140,7 +141,7 @@ def get_CATE_db(cov_l, db_name, level):
                               db_name, level) )
     res_c = cur.fetchall()
        
-    cur.execute(''' select {0}, array_agg(index0),avg(outcome * 1.0), count(*)
+    cur.execute(''' select {0}, array_agg(index),avg(outcome * 1.0), count(*)
                     from {1}
                     where matched = {2} and treated = 1
                     group by {0}
@@ -165,13 +166,19 @@ def get_CATE_db(cov_l, db_name, level):
     result_df = result_df[['index','mean']]
     
     if result_df is None or result_df.empty:
+        #print("Matched: ", str(0))
         return None
     
+    num_matched = 0
+    for key, grp_res in result_df.iterrows():
+        num_matched += len(grp_res['index'])
+
+    print("Matched: ", str(num_matched))
     return result_df
 
 def process_data():
     #parse data
-    df = pd.read_csv('MyBTCData_R2.csv', index_col=0, parse_dates=True)
+    df = pd.read_csv('data/MyBTCData_R2.csv', index_col=0, parse_dates=True)
     df = df.rename(columns={'BTC': 'treated', 'outcome_matrix$ANY_NDRU': 'outcome'})
     df_treated = df.loc[:,'treated']
     df = df.drop('treated',1)
@@ -192,9 +199,9 @@ def process_data():
     df['matched'] = 0
     
     df = df.reset_index()
-    df['index0'] = df.index
-    df = df.drop('index',1)
-    df.to_csv("data.csv")
+    df['index'] = df.index
+    #df = df.drop('index',1)
+    df.to_csv("data/data.csv")
     
     return df,df
 
@@ -211,7 +218,7 @@ def run_db(db_name, holdout_df, num_covs, reg_param = 0.1):
     BF_list = []
 
     level = 1
-    print("level: " + str(level))
+    #print("level: " + str(level))
 
     timings = [0]*5 # first entry - match (groupby and join), 
                     # second entry - regression (compute PE), 
@@ -234,16 +241,17 @@ def run_db(db_name, holdout_df, num_covs, reg_param = 0.1):
     score_list.append(score)
     PE_list.append(PE)
     BF_list.append(BF)
-    
-    print(num_matched)
+    init_score = score_list[-1]
+    #print("Score: ", score_list[-1])
 
     ds.append(d)
     
     timings[4] = timings[4] + time.time() - s
 
+    
     while len(cur_covs)>1:
         level += 1
-        print("level: " + str(level))
+        #print("level: " + str(level))
         # the early stopping conditions
         cur.execute('''select count(*) from {} where "matched"=0 and "treated"=0'''.format(db_name))
         if cur.fetchall()[0][0] == 0:
@@ -258,7 +266,6 @@ def run_db(db_name, holdout_df, num_covs, reg_param = 0.1):
         best_score = -np.inf
         best_PE = -np.inf
         best_BF = -np.inf
-        best_num = -np.inf
         cov_to_drop = None
         
         cur_covs = list(cur_covs)
@@ -273,21 +280,22 @@ def run_db(db_name, holdout_df, num_covs, reg_param = 0.1):
                 best_score = score
                 best_PE = PE
                 best_BF = BF
-                best_num = num_matched
                 cov_to_drop = c
 
+        #print("Score: ", str(best_score))
+        if (init_score < 0 and best_score <= init_score * 1.05) or (init_score >= 0 and best_score <= init_score * 0.95):
+            print("early stop")
+            break
+        score_list.append(best_score)
+        PE_list.append(best_PE)
+        BF_list.append(best_BF)
+
         cur_covs = set(cur_covs) - {cov_to_drop} # remove the dropped covariate from the current covariate set
-        
+        print(cov_to_drop)
         s = time.time()
         update_matched(cur_covs, db_name, level)
         timings[4] = timings[4] + time.time() - s
         
-        score_list.append(best_score)
-        PE_list.append(best_PE)
-        BF_list.append(best_BF)
-        
-        print(best_num)
-
         s = time.time()
         d = get_CATE_db(cur_covs, db_name, level)
         timings[3] = timings[3] + time.time() - s
@@ -296,20 +304,38 @@ def run_db(db_name, holdout_df, num_covs, reg_param = 0.1):
         
         covs_dropped.append(cov_to_drop) # append the removed covariate at the end of the covariate 
     
-    return ds, score_list,PE_list,BF_list
+
+    return ds
+
+def get_ATE(matching_res):
+    total_weighted_sum = 0
+    total_weights = 0
+
+    for matching_res_level in matching_res:
+        if matching_res_level is None:
+            continue
+        for key, matching_res_grp in matching_res_level.iterrows():
+            print(matching_res_grp)
+            total_weighted_sum += len(matching_res_grp['index']) * matching_res_grp['mean']
+            total_weights += len(matching_res_grp['index'])
+
+    print("ATE: ", str(float(total_weighted_sum) * 1.0 / float(total_weights)))
 
 if __name__ == '__main__':
+    random.seed(100)
     conn = psycopg2.connect("dbname='postgres' user='postgres' host='localhost' password='yaoyj11 '")
     cur = conn.cursor()  
     
     engine = create_engine('postgresql+psycopg2://postgres:yaoyj11 @localhost/postgres')
-    table_name = 'flamedb'
+    table_name = 'flame_btc_exp6'
     cur.execute('drop table if exists {}'.format(table_name))
     #cur.execute('drop table if exists {}'.format(table_name))
     conn.commit()
-    #
+    
     train,test = process_data()
     train.to_sql(table_name, engine)
 
-    res = run_db(table_name, test, train.shape[1]-4)   
-    pickle.dump(res, open('FLAME-gen-result', 'wb'))
+    res_gen = run_db(table_name, test, train.shape[1]-4)   
+
+    get_ATE(res_gen)
+    pickle.dump(res_gen, open('FLAME-gen', 'wb'))

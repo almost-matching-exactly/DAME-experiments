@@ -1,10 +1,11 @@
 import numpy
 from matplotlib import pyplot
 
+"""
 x = [5,8,10]
-y_gen = [1.39,1.40,1.43]
-y_col = [5.88,3.19,3.39]
-y_bf = [58.31,518.87,1459.60]
+y_gen = [0.50,0.94,1.45]
+y_col = [0.32,3.26,12.67]
+y_bf = [11.17,518.87,1459.60]
 
 fig,axes = pyplot.subplots(1, 2, figsize=(15,9))
 ax = axes[0]
@@ -15,7 +16,7 @@ ax.set_xticks(range(5, 11, 1))
 #ax.set_yticks(range(0, 201, 50))
 #ax.yticks(fontsize = 20)
 ax.plot(x,y_gen,marker = 'o', linewidth=4, markersize = 15, c = 'orange', label = "FLAME")
-ax.plot(x,y_col, marker = '^', linewidth=4, markersize = 15, c = 'green', label = "D-AEM")
+ax.plot(x,y_col, marker = '^', linewidth=4, markersize = 15, c = 'green', label = "DAME")
 ax.plot(x,y_bf, marker = 's', linewidth=4, markersize = 15, c = 'red', label = "Brute Force")
 ax.set_xlabel('number of covariates(n = 3k units fixed)', fontsize = 20)
 ax.set_ylabel('running time(in seconds)', fontsize = 20)
@@ -34,8 +35,8 @@ for i,j in zip(x,y_bf):
 #pyplot.savefig("running time 3k.png")
 
 x = [1000,3000,5000]
-y_gen = [0.01,0.08,1.31]
-y_col = [0.07,0.43,4.02]
+y_gen = [1.30,1.37,1.48]
+y_col = [13.76,13.59,13.99]
 y_bf = [389.29,468.35,526.53]
 
 #fig = pyplot.figure(figsize=(9,7))
@@ -47,7 +48,7 @@ ax.tick_params(labelsize=20)
 #ax.set_yticks(range(0, 801, 200))
 #ax.yticks(fontsize = 20)
 ax.plot(x,y_gen,marker = 'o', linewidth=4, markersize = 15, c = 'orange', label = "FLAME")
-ax.plot(x,y_col, marker = '^',linewidth=4, markersize = 15, c = 'green', label = "D-AEM")
+ax.plot(x,y_col, marker = '^',linewidth=4, markersize = 15, c = 'green', label = "DAME")
 ax.plot(x,y_bf, marker = 's', linewidth=4,markersize = 15, c = 'red', label = "Brute Force")
 ax.set_xlabel('number of units(p = 10 covariates)', fontsize = 20)
 ax.set_ylabel('running time(in seconds)', fontsize = 20)
@@ -62,12 +63,15 @@ for i,j in zip(x,y_col):
 for i,j in zip(x,y_bf):
     ax.annotate(str(j),xy=(i,j), xytext = (i, j + 25), fontsize = 18)
 
-pyplot.savefig("merge.png")
+fig.subplots_adjust(wspace=0.4)
 
-'''
+pyplot.savefig("running_time.png")
+
+
+"""
 
 x = [20000,30000,40000]
-y_gen = [19.47,22.11,22.85]
+y_gen = [22.19,28.74,44.09]
 
 fig = pyplot.figure(figsize=(9,7))
 ax = fig.add_subplot(111)
@@ -77,7 +81,7 @@ pyplot.xticks(fontsize = 20)
 #ax.set_ylim(-100,2100)
 #ax.set_yticks(range(0, 2000, 500))
 pyplot.yticks(fontsize = 20)
-pyplot.plot(x,y_gen,marker = 's',linewidth=4,  markersize = 15, c = 'green', label = "D-AEM")
+pyplot.plot(x,y_gen,marker = 's',linewidth=4,  markersize = 15, c = 'green', label = "DAME")
 ax.set_xlabel('number of units(p = 12 covariates)', fontsize = 20)
 ax.set_ylabel('running time(in seconds)', fontsize = 20)
 ax.legend(loc='upper center', fontsize = 20)
@@ -85,7 +89,7 @@ ax.legend(loc='upper center', fontsize = 20)
 for i,j in zip(x,y_gen):
     ax.annotate(str(j),xy=(i,j), xytext = (i, j), fontsize = 18)
 
-pyplot.savefig("running time 12 covs.png")
+pyplot.savefig("running_time_12 covs.png")
 
 
-'''
+

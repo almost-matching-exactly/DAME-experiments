@@ -19,14 +19,20 @@ import matplotlib.pyplot as plt
 from decimal import *
 import re
 from functools import partial
+from sortedcontainers import SortedDict
 
 #get matching result for collapsing FLAME    
 with open('res/FLAME-col-result','rb') as f:
     data = pickle.load(f) 
 match_list_col = data
 
-cates = {}
+#print(match_list_col)
 
+cates = {}
+idx_0 = []
+cates_num = {}
+pos = []
+neg = []
 for match in match_list_col: 
     if match is None:
         continue
@@ -34,11 +40,23 @@ for match in match_list_col:
         index_list = group[2]
         mean = group[0]
         for idx in index_list:
+            if mean > 0.0:
+                pos.append(idx)
+            elif mean < 0.0:
+                neg.append(idx)
             cates[idx] = mean
 
-sorted_cates = sorted(cates.items(), key = operator.itemgetter(1))
-#print(sorted_cates)
+        cates_num[mean] = cates_num[mean] + len(index_list) if mean in cates_num else len(index_list)
+cates_col = [None] * 382
 
+
+
+for key in cates:
+    cates_col[int(key) - 1] = cates[key]
+
+for i in cates_col:
+    if i is None:
+        print(i)
 
 df = pd.read_csv('data/MyBTCData_R2.csv', index_col=0, parse_dates=True)
 df = df.rename(columns={'BTC': 'treated', 'outcome_matrix$ANY_NDRU': 'outcome'})
@@ -63,14 +81,23 @@ df['matched'] = 0
 df = df.reset_index()
 df['index'] = df.index
 
-"""
-large_cate_data_idx = [22, 374, 353, 21, 116, 178, 32, 194, 192]
-large_cate_people = df[df["index"].isin(large_cate_data_idx)]
-print(large_cate_people)
+pos_indicator = [0] * 382
+for i in range(382):
+    if i in pos:
+        pos_indicator[i] = 1
+    else:
+        pos_indicator[i] = 0
 
 
+neg_indicator = [0] * 382
+for i in range(382):
+    if i in neg:
+        neg_indicator[i] = 1
+    else:
+        neg_indicator[i] = 0
 
-small_cate_data_idx = [210, 68, 0, 341, 350, 209, 283, 342, 224, 262, 263, 354, 236, 228, 309, 176, 25, 252, 179, 62, 94, ]
-small_cate_people = df[df["index"].isin(small_cate_data_idx)]
-print(small_cate_people)
-"""
+#print(pos_indicator.count(1))
+for i in range(10):
+    x = df[str(i)]
+    print(x.tolist(), np.corrcoef(x, pos_indicator))
+    

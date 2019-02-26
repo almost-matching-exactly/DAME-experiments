@@ -5,6 +5,6 @@ D-AEM: The file contains the most fundamental parts of the main algorithm
 BTC_exp: The folder contains all codes to generate BTC experiment results
 
 Main contributor for this repo:
-Awa Dieng(awa.dieng@duke.edu)
 Yameng Liu(yameng.liu@duke.edu)
+Awa Dieng(awa.dieng@duke.edu)
 

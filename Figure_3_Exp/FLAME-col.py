@@ -128,7 +128,7 @@ def match_mp(df, covs, covs_max_list,
     
     # a unit is matched if and only if the counts don't agree
     match_indicator = ~(counts_w_t[unqtags_w_t] == counts_wo_t[unqtags_wo_t]) 
-        
+    #print(match_indicator)
     return match_indicator, lidx_wo_t[match_indicator]
 
 
@@ -175,6 +175,7 @@ def prediction_error_mp(holdout, covs_subset, ridge_reg = 0.1):
     # -- below is the level-wise MQ
     return  (PE, time_PE,  n_mse_t, n_mse_c) 
 
+"""
 # function to compute the balancing factor
 def balancing_factor_mp(df, match_indicator, tradeoff = 0.1):
     ''' Input : 
@@ -228,6 +229,23 @@ def match_quality_mp(BF, PE):
     
     
     return  (BF + PE) 
+"""
+
+def match_quality_mp(PE):
+    ''' Input : 
+            df : the data matrix
+            holdout : the training data matrix
+            covs_subsets : the list of covariates to matched on
+            match_indicator : the matched indicator column 
+        
+        Output : 
+            match_quality : the matched quality
+            time_PE : time to compute the regression
+            time_BF : time to compute the balancing factor
+    '''    
+    
+    
+    return  (PE) 
 
 # ------------ Get CATE for each matched group ------------ #
 # df : whole dataset
@@ -388,14 +406,17 @@ class DroppedSets_mp:
                     break # no need to check if the others 
                           # prefixes have been dropped
         
+        
         for remove in remove_candidates:
             new_active_sets.remove(remove)
-        '''                  
+        
+        """                
         for r in rem:
             print("new active sets try to remove: ", r)
             new_active_sets.remove(r)
             # new_active_sets contains the sets to add to possible_drops
         '''
+        """
 
         #print("new active sets: ", new_active_sets)
         return new_active_sets
@@ -448,7 +469,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     #--------- MATCH WITHOUT DROPPING ANYTHING AND GET CATE ----------#
 
     nb_steps = 1
-
+    print("level ", str(nb_steps))
     # match without dropping anything and marked matched units as "matched"
     match_indicator_for_all, index = match_mp(df, all_covs, covs_max_list) 
     match_indicator = get_actual_match_indicator(df,match_indicator_for_all)
@@ -457,13 +478,15 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     df.update(new_df)
   
     nb_match_units = [len(df[match_indicator])]
+    #print(nb_match_units[-1])
 
-    BFs, time_BFs = balancing_factor_mp(df, match_indicator,
-                                     tradeoff=tradeoff_param)
-    balance = [BFs]
+    #BFs, time_BFs = balancing_factor_mp(df, match_indicator,
+                                     #tradeoff=tradeoff_param)
+    #balance = [BFs]
     PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, covs)
     prediction = [PEs]
-    level_scores = [PEs + BFs]
+    #level_scores = [PEs + BFs]
+    level_scores = [PEs]
 
     prediction_pos = [0]
     n_mse_treatment = [n_mse_T]
@@ -483,6 +506,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     while len(pos_drops)>0: # we still have sets to drop
         
         nb_steps = nb_steps + 1
+        print("level ", str(nb_steps))
         #print("level", nb_steps)
         
         # new stoping criteria
@@ -522,8 +546,8 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
                                            cur_covs_max_list_no_s) 
             match_indicator = get_actual_match_indicator(df,match_indicator_for_all)
             
-            BF, time_BF = balancing_factor_mp(df, match_indicator,
-                                           tradeoff=tradeoff_param)
+            #BF, time_BF = balancing_factor_mp(df, match_indicator,
+                                           #tradeoff=tradeoff_param)
 
             if tuple(s) not in PE[len(s)].sets.keys():
                 tmp_pe, time_PE, n_mse_t, n_mse_c = prediction_error_mp(holdout,
@@ -533,8 +557,9 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
             pe_s = PE[len(s)].sets[tuple(s)] 
             prediction_pos.append(pe_s)
 
-            score = match_quality_mp(BF, pe_s)
-               
+            #score = match_quality_mp(BF, pe_s)
+            score = match_quality_mp(pe_s)
+
             matching_result_tmp.append((cur_covs_no_s, cur_covs_max_list_no_s,
                                          score, match_indicator_for_all, match_indicator, index) )
             
@@ -545,7 +570,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
         
         # choose the set with largest MQ as the set to drop
         best_res = max(matching_result_tmp, key=itemgetter(2)) 
-
+        #print(len(df[best_res[-2]]))
         new_df = df[best_res[-2]]
         new_df["matched"] = nb_steps
         df.update(new_df)
@@ -565,9 +590,9 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
         cur_covs_no_s = sorted(set(covs_used))
         cur_covs_max_list_no_s = [2]*(len(covs_used))
         
-        BFs, time_BFs = balancing_factor_mp(df, best_res[3], 
-                                         tradeoff=tradeoff_param)
-        balance.append(BFs)
+        #BFs, time_BFs = balancing_factor_mp(df, best_res[3], 
+                                         #tradeoff=tradeoff_param)
+        #balance.append(BFs)
         
         PEs, time_PE, n_mse_T, n_mse_C = prediction_error_mp(holdout, 
                                                           cur_covs_no_s)
@@ -613,12 +638,11 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     s_end = time.time()
 
     print("time:", s_end - s_start)   
-    return (matching_res, level_scores, drops, nb_match_units,
-            balance, prediction, n_mse_treatment, n_mse_control)
+    return (matching_res, level_scores, drops, nb_match_units, n_mse_treatment, n_mse_control)
 
 if __name__ == '__main__':
-    df,_,_ = data_generation(20000, 20000, 12, 0)
-    holdout,_,_ = data_generation(20000, 20000, 12, 0)
+    df,_,_ = data_generation(20000, 20000, 2,10)
+    holdout,_,_ = data_generation(20000, 20000, 2,10)
 
     res = run_mpbit(df, holdout, range(12), [2]*12, 0,tradeoff_param = 0.1)
     

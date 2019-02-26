@@ -362,6 +362,7 @@ def get_actual_match_indicator(df,match_indicator_for_all):
 # In[14]:
 
 def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1):
+    unit_num_vs_cov_num = {}
     total_units_num = df.shape[0]
 
     covs = list(covs)
@@ -401,11 +402,12 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     #--------- MATCH WITHOUT DROPPING ANYTHING AND GET CATE ----------#
 
     nb_steps = 1
-    print("level", nb_steps)
+    print(len(covs))
 
     # match without dropping anything and marked matched units as "matched"
     match_indicator_for_all, index = match_mp(df, all_covs, covs_max_list) 
     match_indicator = get_actual_match_indicator(df,match_indicator_for_all)
+    print(len(df[match_indicator]))
     new_df = df[match_indicator]
     new_df["matched"] = nb_steps
     df.update(new_df)
@@ -424,7 +426,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     prediction_pos = [0]
     n_mse_treatment = [n_mse_T]
     n_mse_control = [n_mse_C]
-    print(BFs + PEs)
+
     # get the CATEs without dropping anything
     res = get_CATE_bit_mp(df, match_indicator_for_all,match_indicator, index) 
 
@@ -524,7 +526,12 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
         cur_covs_no_s = sorted(set(covs_used))
         cur_covs_max_list_no_s = [2]*(len(covs_used))
         
-        print(best_res[2])
+        nb_match = len(df[best_res[-2]])
+        nb_match_cov = len(best_res[0])
+        unit_num_vs_cov_num[nb_match_cov] = unit_num_vs_cov_num[nb_match_cov] + nb_match if nb_match_cov in unit_num_vs_cov_num else nb_match
+
+        #print(len(cur_covs_no_s))
+        #print(len(df[best_res[-2]]))
 
         BFs, time_BFs = balancing_factor_mp(df, best_res[3], 
                                          tradeoff=tradeoff_param)
@@ -572,6 +579,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1)
     
         #------------------- QUEUE UPDATED -----------------------------#
 
+    print(unit_num_vs_cov_num)
     return (matching_res, level_scores, drops, nb_match_units,
             balance, prediction, n_mse_treatment, n_mse_control)
 
@@ -582,7 +590,7 @@ def get_total_matched(matching_res, start_idx):
         for elem in grp:
             if int(elem) >= start_idx:
                 total_count += 1
-    print(total_count)
+    #print(total_count)
 
 def get_catt(df, matching_res, num_t, start_idx):
     estimated_catt_init = [None] * int(num_t)
@@ -618,9 +626,11 @@ if __name__ == '__main__':
 
     x, y = get_catt(df, res[0], 2000, 10000)
 
+    """
     print(len(x))
     print(len(y))
     print(MSE(x,y))
+    """
     get_total_matched(res[0], 10000)
     pickle.dump(x, open("res/DAEMR-x-1", 'wb'))
     pickle.dump(y, open("res/DAEMR-y-1", 'wb'))
