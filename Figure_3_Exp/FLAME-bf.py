@@ -185,7 +185,7 @@ def run_bf(df,covs, w):
     return res, cates
 
 if __name__ == '__main__':
-    df,dense_bs,_ = data_generation(1500, 1500, 10, 0)
-    holdout,_,_ = data_generation(1500, 1500, 10, 0)
+    df,dense_bs,_ = data_generation(1500, 1500, 5, 0)
+    holdout,_,_ = data_generation(1500, 1500, 5, 0)
 
-    res = run_bf(df, range(10), dense_bs)
+    res = run_bf(df, range(5), dense_bs)

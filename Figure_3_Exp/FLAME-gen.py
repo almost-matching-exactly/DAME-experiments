@@ -265,7 +265,8 @@ def run_bit(df, holdout, covs, covs_max_list, tradeoff_param = 0.1):
                     # third entry - compute BF, fourth entry - keep track of CATE,
                     # fifth entry - update dataframe (remove matched units)
     
-    level = 0
+    level = 1
+    print("level ", str(level))
     s = time.time()
     match_indicator, index = match(df, cur_covs, covs_max_list) # match without dropping anything
     timings[0] = timings[0] + time.time() - s
@@ -288,6 +289,7 @@ def run_bit(df, holdout, covs, covs_max_list, tradeoff_param = 0.1):
         
         best_score = np.inf
         level += 1
+        print("level ", str(level))
         matching_result_tmp = []
         
         if (np.sum(df['treated'] == 0) == 0 ) | (np.sum(df['treated'] == 1) == 0 ): # the early stopping condition
@@ -348,10 +350,10 @@ if __name__ == '__main__':
     #### IMPORTANT NOTE: make sure to name the columns by numbers, say, if you have 3 covariates, name them to be 0,1,2 from left to right
 
     ## below is an example
-    df,_,_ = data_generation(1500, 1500, 12, 0)
-    holdout,_,_ = data_generation(1500, 1500, 12, 0)
+    df,_,_ = data_generation(2500, 2500, 1, 9)
+    holdout,_,_ = data_generation(2500, 2500, 1, 9)
 
-    res = run_bit(df, holdout, range(12), [2]*12, tradeoff_param = 0.1)
+    res = run_bit(df, holdout, range(10), [2]*10, tradeoff_param = 0.1)
 
     #pickle.dump(res, open('FLAME-bit-result', 'wb'))
     ## above is an example
