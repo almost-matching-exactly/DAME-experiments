@@ -19,9 +19,15 @@ from sqlalchemy import create_engine
 from mpl_toolkits.mplot3d import Axes3D
 import warnings; warnings.simplefilter('ignore')
 
+###provide information on which is the "MAIN" function that needs to be run by a practitioner?
+###what goes INTO this function? what FORMAT it goes into 
+
 def match_mp(df, covs, covs_max_list, 
           treatment_indicator_col='treated', match_indicator_col='matched'):
-    
+    ###what is a "dataframe"? what should it look like? provide an example of rows and columns
+    ###how are you inputing a "match_indicator"??? shouldn't the function be producing this?
+    ###what do the indices that are being produced by the function doing? give an example.
+    ###this should match up with the vignette that you write (similar to Jerry's FLAME vignette)
     ''' Input: 
             df : a dataframe,
             covs : a set of covariates to match on, 
@@ -147,6 +153,7 @@ def balancing_factor_mp(df, match_indicator, tradeoff = 0.1):
 
 # match_quality, the larger the better
 def match_quality_mp(BF, PE):
+    ####these comments don't make any sense...
     ''' Input : 
             df : the data matrix
             holdout : the training data matrix
@@ -335,6 +342,7 @@ class DroppedSets_mp:
 
     
 def process_data():
+    ###why is this in here??? this is NOT part of the method
     #parse data
     df = pd.read_csv('./BTC_exp/MyBTCData_R2.csv', index_col=0, parse_dates=True)
     df = df.rename(columns={'BTC': 'treated', 'outcome_matrix$ANY_NDRU': 'outcome'})
@@ -362,6 +370,7 @@ def process_data():
     return train,holdout
 
 def get_actual_match_indicator(df,match_indicator_for_all):
+    ###WHAT IS THIS?
     unmatched_indicator = df['matched'] == 0
     #print("unmatch")
     #print(unmatched_indicator)
@@ -371,7 +380,9 @@ def get_actual_match_indicator(df,match_indicator_for_all):
 
 # In[14]:
 
+###IS THIS THE MAIN FUNCTION???
 def run_mpbit(df, holdout, covs, covs_max_list, threshold, tradeoff_param = 0.1):
+    ###IS THERE ANY DOCUMENTATION for what format things need to be put in, etc?
     covs = list(covs)
     covs_max_list = list(covs_max_list)
     
@@ -597,6 +608,7 @@ def get_ATE(matching_res):
     print("ATE: " + str(ATE))
         
 # In[15]:
+### WHAT IS THIS? IS THIS RUNNING BTC?
 if __name__ == '__main__':
     train,test = process_data()
     index_list = ['0','1','2','3','4','5','6','7','8','9']
@@ -604,7 +616,7 @@ if __name__ == '__main__':
         train.rename(columns={index:int(index)},inplace=True)
         test.rename(columns={index:int(index)},inplace=True)    
     
-    res = run_mpbit(train, test,range(10), [2]*10, threshold = 0, tradeoff_param = 0.001)
+    res = run_mpbit(train, test,range(10), [2]*10, threshold = 0, tradeoff_param = 0.001) ###WHY IS THIS tradeoff not 0?
     get_ATE(res[0])
     #res_col = run_mpbit(train, test,range(10), [2]*10, threshold = 0, tradeoff_param = 0.001) 
     #pickle.dump(res_col, open('FLAME-col-result', 'wb'))
