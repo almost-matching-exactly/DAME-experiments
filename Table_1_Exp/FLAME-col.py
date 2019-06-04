@@ -624,14 +624,14 @@ if __name__ == '__main__':
     
     res = run_mpbit(df, holdout, range(18), [2]*18, 0.5,tradeoff_param = 0.1)
 
-    x, y = get_catt(df, res[0], 2000, 10000)
+    x, y = get_catt(df, res[0], 2000, 30000)
 
-    """
     print(len(x))
     print(len(y))
+    """
     print(MSE(x,y))
     """
-    get_total_matched(res[0], 10000)
-    pickle.dump(x, open("res/DAEMR-x-1", 'wb'))
-    pickle.dump(y, open("res/DAEMR-y-1", 'wb'))
+    get_total_matched(res[0], 30000)
+    pickle.dump(x, open("res/DAME-x-2", 'wb'))
+    pickle.dump(y, open("res/DAME-y-2", 'wb'))
     

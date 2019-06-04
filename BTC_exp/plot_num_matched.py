@@ -41,8 +41,8 @@ def draw_hist(ax, x, x1, x2, daem, flame, percent):
     #plt.savefig(filename)
 
 x = [10,9,8,7,6,5,4,3,2,1]
-x1 = [e - 0.2 for e in x]
-x2 = [e + 0.2 for e in x]
+#x1 = [e - 0.2 for e in x]
+#x2 = [e + 0.2 for e in x]
 f, axes = plt.subplots(1, 1,  figsize=(8,5))
 dame = [287, 69, 21, 2, 1, 0, 0, 0, 0, 0]
 flame = [287, 7,  25, 9, 7,12, 6, 5, 11, 5]

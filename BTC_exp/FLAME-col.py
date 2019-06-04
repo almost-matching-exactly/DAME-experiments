@@ -93,8 +93,8 @@ def prediction_error_mp(holdout, covs_subset, ridge_reg = 0.1):
     ridge_c = Ridge(alpha=0.1) 
     ridge_t = Ridge(alpha=0.1) 
     """
-    ridge_c = Ridge(alpha=0.1) 
-    ridge_t = Ridge(alpha=0.1) 
+    ridge_c = DecisionTreeRegressor(max_depth=5) 
+    ridge_t = DecisionTreeRegressor(max_depth=5) 
        
     n_mse_t = np.mean(cross_val_score(ridge_t,
                                 holdout[holdout['treated']==1][covs_subset], 
@@ -568,6 +568,7 @@ def get_ATE(matching_res):
     print("ATE: " + str(ATE))
 
 if __name__ == '__main__':
+    np.random.seed(100)
     random.seed(100)
     train,test = process_data()
 

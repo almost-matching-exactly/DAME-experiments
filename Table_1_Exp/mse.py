@@ -30,16 +30,24 @@ import matplotlib.pyplot as plt
 from decimal import Decimal
 import warnings
 
-
+"""
 with open("data/df2",'rb') as f:
     df = pickle.load(f)  
 
 x = list(df[df["treated"] == 1]["true_effect"])
+"""
 
+with open("res/DAME-x-2",'rb') as f:
+    x = pickle.load(f) 
 
+with open("res/DAME-y-2",'rb') as f:
+    y = pickle.load(f) 
+
+"""
 f = open("data/ps_out.txt", "r+")
 y = [float(line.replace("\n","")) for line in f.readlines()]
 f.close()
+"""
 
 print(len(x))
 print(len(y))
