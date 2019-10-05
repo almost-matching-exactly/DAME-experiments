@@ -360,7 +360,7 @@ def run_mpbit(df, holdout, covs, covs_max_list, threshold = 0.1, early_stop = Tr
         
         # new stoping criteria
         if pos_drops == [all_covs]: 
-            print('all possibles sets dropped')  
+            print('all possible sets dropped')  
             break
         
         # no treatment / control units left
