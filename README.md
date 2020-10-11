@@ -1,4 +1,4 @@
-# Experiments on DAME for the AISTATS 2019 Submission
+# Experiments on the DAME Algorithm for the AISTATS 2019 Submission
 
 Please note that this repository is **not** intended for users. The Python package for users to use the DAME algorithm is in another respository: https://github.com/almost-matching-exactly/DAME-FLAME-Python-Package.
 
